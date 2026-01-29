@@ -5,7 +5,7 @@ import os
 sys.path.append(os.path.dirname(os.path.realpath(__file__)) + "/..")
 import argparse
 import utils
-from datasets import load_dataset
+from datasets import load_dataset, load_from_disk
 import datasets
 
 datasets.disable_progress_bar()
@@ -37,6 +37,14 @@ def get_output_file(path, force=False):
                 processed_results.append(results["id"])
         fout = open(path, "a")
         return fout, processed_results
+
+
+def load_qa_dataset(input_path, split):
+    if os.path.isdir(input_path) and os.path.exists(
+        os.path.join(input_path, "dataset_dict.json")
+    ):
+        return load_from_disk(input_path)[split]
+    return load_dataset(input_path, split=split)
 
 
 def parse_prediction(prediction):
@@ -120,7 +128,7 @@ def gen_prediction(args):
     print("Save results to: ", output_dir)
 
     # Load dataset
-    dataset = load_dataset(input_file, split=args.split)
+    dataset = load_qa_dataset(input_file, args.split)
 
     # Load prompt template
     prompter = utils.InstructFormater(args.prompt_path)

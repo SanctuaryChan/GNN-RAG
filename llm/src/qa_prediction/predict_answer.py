@@ -7,7 +7,7 @@ import argparse
 from tqdm import tqdm
 from llms.language_models import get_registed_model
 import os
-from datasets import load_dataset
+from datasets import load_dataset, load_from_disk
 from qa_prediction.evaluate_results import eval_result
 import json
 from multiprocessing import Pool
@@ -38,6 +38,14 @@ def match(s1: str, s2: str) -> bool:
     s1 = normalize(s1)
     s2 = normalize(s2)
     return s2 in s1
+
+
+def load_qa_dataset(input_path, split):
+    if os.path.isdir(input_path) and os.path.exists(
+        os.path.join(input_path, "dataset_dict.json")
+    ):
+        return load_from_disk(input_path)[split]
+    return load_dataset(input_path, split=split)
 
 
 def load_gnn_rag(g_data_file, g_data_file2=None):
@@ -175,7 +183,7 @@ def main(args, LLM):
     input_file = os.path.join(args.data_path, args.d)
     rule_postfix = "no_rule"
     # Load dataset
-    dataset = load_dataset(input_file, split=args.split)
+    dataset = load_qa_dataset(input_file, args.split)
     if args.add_rule:
         rule_postfix = args.rule_path.replace("/", "_").replace(".", "_")
         rule_dataset = utils.load_jsonl(args.rule_path)
