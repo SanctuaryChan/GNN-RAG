@@ -1,10 +1,11 @@
 
 SPLIT="test"
 DATASET_LIST="RoG-webqsp"
-MODEL_NAME=RoG
+MODEL_NAME=llama2
 PROMPT_PATH=prompts/llama2_predict.txt
 DATA_PATH=/data/GNN-RAG/datasets
 BEAM_LIST="3" # "1 2 3 4 5"
+MODEL_PATH=/data/GNN-RAG/models/Llama-2-7b-chat-hf
 
 # RULE_PATH 为LLM本身生成的路径
 # RULE_PATH_G1 为GNN生成的路径
@@ -21,16 +22,17 @@ for DATA_NAME in $DATASET_LIST; do
         python src/qa_prediction/predict_answer.py \
             --data_path ${DATA_PATH} \
             --model_name ${MODEL_NAME} \
+            --model_path ${MODEL_PATH} \
             -d ${DATA_NAME} \
             --prompt_path ${PROMPT_PATH} \
             --rule_path ${RULE_PATH} \
             --rule_path_g1 ${RULE_PATH_G1} \
             --rule_path_g2 ${RULE_PATH_G2} \
-            --model_path /data/GNN-RAG/models/rmanluo-RoG \
             --predict_path results/KGQA-GNN-RAG/rearev-sbert
     done
 done
 
+# --model_path /data/GNN-RAG/models/rmanluo-RoG \
 
 #GNN-RAG-RA
 # for DATA_NAME in $DATASET_LIST; do
