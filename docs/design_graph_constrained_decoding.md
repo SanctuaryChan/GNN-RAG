@@ -107,9 +107,66 @@ llm/src/constraints/
 ### 6.1 主要指标
 - Answer-F1 / Hits@1 / Accuracy（已有评估脚本）
 
-### 6.2 新增指标
-- **Evidence Consistency**：输出实体是否在检索子图中。
-- **Hallucination Rate**：输出实体不在检索子图的比例。
+### 6.2 幻觉相关指标（与 `eval_hallucination.py` 一致）
+**可用字段**
+- `predictions.jsonl`: `id`, `prediction`（原始模型输出）
+- `results/gnn/.../test.info`: `cand`（GNN 检索候选实体）
+- `entities_names.json`: `mid -> name` 映射（用于把 `cand` 转为实体名）
+
+**集合与符号定义**
+- 第 \(i\) 个样本候选实体集合：\(C_i\)。由 `cand` 的 `mid` 映射到实体名后再 normalize。
+- 第 \(i\) 个样本预测实体集合：\(P_i\)。从 `prediction` 抽取片段并 normalize 后得到集合。
+- 归一化函数 \( \mathrm{norm}(\cdot) \)：小写、去标点、去冠词、去多余空白（与 `evaluate_results.py` 一致）。
+
+**预测抽取规则（脚本当前实现）**
+1. 按行切分 `prediction`，去掉行首编号/符号（如 `1.`、`-`）。  
+2. 每行按分隔符切片（`,` `;`，以及短句中的 `and`）。  
+3. 解释行判定：若行中包含解释关键词，则记 \(Explain_i=1\)。  
+4. 行/片段过滤：  
+   - 启用 `--drop-explain-unless-cand` 时，解释行默认丢弃，除非该行包含候选实体。  
+   - 启用 `--keep-only-cand` 时，只保留命中候选实体的片段。  
+   - 片段长度超过阈值 `max_line_len` 时，仅在“命中候选”时保留。  
+   - “命中候选”支持 **exact** 与 **containment**（`--containment` 开启子串包含）。  
+
+**指标定义（逐样本）**  
+令 \(P_i\) 为预测实体集合、\(C_i\) 为候选实体集合：
+- **Evidence Consistency (EC)**  
+  \[
+  EC_i = \frac{|P_i \cap C_i|}{\max(1, |P_i|)}
+  \]
+- **Hallucination Rate (HR)**  
+  \[
+  HR_i = 1 - EC_i
+  \]
+- **Strict Hallucination (SH)**  
+  \[
+  SH_i = \mathbb{1}\left(|P_i \setminus C_i| > 0\right)
+  \]
+- **Empty**  
+  \[
+  Empty_i = \mathbb{1}\left(|P_i| = 0\right)
+  \]
+- **ExplainHit**  
+  \[
+  Explain_i = \mathbb{1}\left(\exists\ \text{行含解释关键词}\right)
+  \]
+
+**汇总统计（脚本输出）**  
+对可对齐候选的样本集合 \(\mathcal{D}\) 取均值：
+\[
+EC = \frac{1}{|\mathcal{D}|}\sum_{i\in\mathcal{D}} EC_i,\quad
+HR = \frac{1}{|\mathcal{D}|}\sum_{i\in\mathcal{D}} HR_i,\quad
+SH = \frac{1}{|\mathcal{D}|}\sum_{i\in\mathcal{D}} SH_i
+\]
+\[
+EmptyRate = \frac{1}{|\mathcal{D}|}\sum_{i\in\mathcal{D}} Empty_i,\quad
+ExplainRate = \frac{1}{|\mathcal{D}|}\sum_{i\in\mathcal{D}} Explain_i
+\]
+
+**实现注意**
+- 这些指标不依赖 `ground_truth`，只衡量“输出是否落在候选证据内”。  
+- 若 \(P_i\) 为空，脚本返回 \(EC_i=0, HR_i=0, SH_i=0\)，并在 `EmptyRate` 中统计。  
+- 启用 `--keep-only-cand` 与 `--drop-explain-unless-cand` 后，指标更接近“实体级幻觉”而非“解释文本噪声”。  
 
 ### 6.3 消融实验
 - hard vs soft
