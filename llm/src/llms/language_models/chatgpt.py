@@ -49,7 +49,7 @@ class ChatGPT(BaseLanguageModel):
         '''
         pass
     
-    def generate_sentence(self, llm_input):
+    def generate_sentence(self, llm_input, constraints=None):
         query = [{"role": "user", "content": llm_input}]
         cur_retry = 0
         num_retry = self.retry

@@ -1,7 +1,9 @@
-from transformers import pipeline, AutoTokenizer
+from transformers import pipeline, AutoTokenizer, LogitsProcessorList
 import torch
 from .base_language_model import BaseLanguageModel
 from transformers import LlamaTokenizer
+
+from constraints.logits import HardConstraintProcessor
 
 class Llama(BaseLanguageModel):
     DTYPE = {"fp32": torch.float32, "fp16": torch.float16, "bf16": torch.bfloat16}
@@ -29,8 +31,39 @@ class Llama(BaseLanguageModel):
         #model_kwargs.update({'use_auth_token': True})
         print("model: ", self.args.model_path)
         self.generator = pipeline("text-generation", token="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", model=self.args.model_path, tokenizer=self.tokenizer, device_map="auto", model_kwargs=model_kwargs, torch_dtype=self.DTYPE.get(self.args.dtype, None))
+        self.model = self.generator.model
 
     @torch.inference_mode()
-    def generate_sentence(self, llm_input):
-        outputs = self.generator(llm_input, return_full_text=False, max_new_tokens=self.args.max_new_tokens)
-        return outputs[0]['generated_text'] # type: ignore
+    def generate_sentence(self, llm_input, constraints=None):
+        if constraints is None or getattr(constraints, "mode", "none") == "none":
+            outputs = self.generator(llm_input, return_full_text=False, max_new_tokens=self.args.max_new_tokens)
+            return outputs[0]['generated_text'] # type: ignore
+
+        if getattr(constraints, "strength", "hard") != "hard" or getattr(constraints, "trie", None) is None:
+            outputs = self.generator(llm_input, return_full_text=False, max_new_tokens=self.args.max_new_tokens)
+            return outputs[0]['generated_text'] # type: ignore
+
+        inputs = self.tokenizer(llm_input, return_tensors="pt")
+        input_ids = inputs["input_ids"].to(self.model.device)
+        attention_mask = inputs.get("attention_mask")
+        if attention_mask is not None:
+            attention_mask = attention_mask.to(self.model.device)
+        prompt_len = input_ids.shape[-1]
+
+        logits_processor = LogitsProcessorList()
+        logits_processor.append(
+            HardConstraintProcessor(
+                constraints.trie,
+                prompt_len,
+                eos_token_id=self.tokenizer.eos_token_id,
+            )
+        )
+
+        outputs = self.model.generate(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            max_new_tokens=self.args.max_new_tokens,
+            logits_processor=logits_processor,
+        )
+        generated = outputs[0][prompt_len:]
+        return self.tokenizer.decode(generated, skip_special_tokens=True).strip()

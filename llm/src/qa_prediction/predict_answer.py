@@ -14,6 +14,9 @@ from multiprocessing import Pool
 from qa_prediction.build_qa_input import PromptBuilder
 from functools import partial
 
+from constraints.builder import ConstraintBuilder
+from constraints.providers.project_adapter import GnnRagProvider
+
 import json
 
 with open('entities_names.json') as f:
@@ -132,7 +135,19 @@ def merge_rule_result(qa_dataset, rule_dataset, n_proc=1, filter_empty=False):
     return qa_dataset
 
 
-def prediction(data, processed_list, input_builder, model, encrypt=False, data_file_gnn=None):
+def prediction(
+    data,
+    processed_list,
+    input_builder,
+    model,
+    encrypt=False,
+    data_file_gnn=None,
+    constraint_builder=None,
+    constraint_provider=None,
+    constraint_mode="none",
+    constraint_strength="hard",
+    constraint_k=0,
+):
     question = data["question"]
     answer = data["answer"]
     entities = data['q_entity']
@@ -166,7 +181,17 @@ def prediction(data, processed_list, input_builder, model, encrypt=False, data_f
         }
     
     input = input_builder.process_input(data)
-    prediction = model.generate_sentence(input).strip()
+    constraints = None
+    if constraint_builder is not None and constraint_provider is not None:
+        inputs = constraint_provider.build(data)
+        max_candidates = constraint_k if constraint_k and constraint_k > 0 else None
+        constraints = constraint_builder.build(
+            inputs,
+            mode=constraint_mode,
+            strength=constraint_strength,
+            max_candidates=max_candidates,
+        )
+    prediction = model.generate_sentence(input, constraints=constraints).strip()
     if prediction is None:
         return None
     result = {
@@ -242,6 +267,12 @@ def main(args, LLM):
             args.prompt_path, args.encrypt,args.add_rule, use_true=args.use_true
         )
 
+    constraint_builder = None
+    constraint_provider = None
+    if model is not None and args.constraint_mode != "none":
+        constraint_provider = GnnRagProvider()
+        constraint_builder = ConstraintBuilder(model.tokenizer)
+
     # Save args file
     with open(os.path.join(output_dir, "args.txt"), "w") as f:
         json.dump(args.__dict__, f, indent=2)
@@ -259,7 +290,12 @@ def main(args, LLM):
                         input_builder=input_builder,
                         model=model,
                         encrypt=args.encrypt,
-                        data_file_gnn=data_file_gnn
+                        data_file_gnn=data_file_gnn,
+                        constraint_builder=constraint_builder,
+                        constraint_provider=constraint_provider,
+                        constraint_mode=args.constraint_mode,
+                        constraint_strength=args.constraint_strength,
+                        constraint_k=args.constraint_k,
 
                     ),
                     dataset,
@@ -273,7 +309,19 @@ def main(args, LLM):
                     fout.flush()
     else:
         for data in tqdm(dataset):
-            res = prediction(data, processed_list, input_builder, model, encrypt=args.encrypt, data_file_gnn=data_file_gnn)
+            res = prediction(
+                data,
+                processed_list,
+                input_builder,
+                model,
+                encrypt=args.encrypt,
+                data_file_gnn=data_file_gnn,
+                constraint_builder=constraint_builder,
+                constraint_provider=constraint_provider,
+                constraint_mode=args.constraint_mode,
+                constraint_strength=args.constraint_strength,
+                constraint_k=args.constraint_k,
+            )
             if res is not None:
                 if args.debug:
                     print(json.dumps(res))
@@ -310,6 +358,19 @@ if __name__ == "__main__":
     argparser.add_argument("--explain", action="store_true")
     argparser.add_argument("--use_random", action="store_true")
     argparser.add_argument("--each_line", action="store_true")
+    argparser.add_argument(
+        "--constraint_mode",
+        type=str,
+        choices=["none", "entity"],
+        default="none",
+    )
+    argparser.add_argument(
+        "--constraint_strength",
+        type=str,
+        choices=["hard", "soft"],
+        default="hard",
+    )
+    argparser.add_argument("--constraint_k", type=int, default=0)
     argparser.add_argument(
         "--rule_path",
         type=str,

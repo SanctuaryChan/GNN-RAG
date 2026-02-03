@@ -30,11 +30,12 @@ class BaseLanguageModel(object):
         '''
         raise NotImplementedError
 
-    def generate_sentence(self, lm_input):
+    def generate_sentence(self, lm_input, constraints=None):
         """
         Generate sentence by using a LM
 
         Args:
             lm_input (LMInput): input for LM
+            constraints: optional constraint spec for decoding
         """
         raise NotImplementedError

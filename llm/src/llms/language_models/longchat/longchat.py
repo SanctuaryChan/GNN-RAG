@@ -41,6 +41,6 @@ class Longchat(BaseLanguageModel):
         self.generator = pipeline("text-generation", model=self.args.model_path, tokenizer=self.tokenizer, device_map="auto", torch_dtype=self.DTYPE.get(self.args.dtype, None), model_kwargs=model_kwargs)
         
     @torch.inference_mode()
-    def generate_sentence(self, llm_input):
+    def generate_sentence(self, llm_input, constraints=None):
         outputs = self.generator(llm_input, return_full_text=False, max_new_tokens=self.args.max_new_tokens, use_cache=not self.args.longchat_flash_attn) # Flash Atten does not support cache
         return outputs[0]['generated_text'] # type: ignore

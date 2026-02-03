@@ -25,6 +25,6 @@ class Alpaca(BaseLanguageModel):
         self.generator = pipeline("text-generation", model=self.args.model_path, tokenizer=self.tokenizer, device_map="auto", model_kwargs=model_kwargs, torch_dtype=self.DTYPE.get(self.args.dtype, None))
     
     @torch.inference_mode()
-    def generate_sentence(self, llm_input):
+    def generate_sentence(self, llm_input, constraints=None):
         outputs = self.generator(llm_input, return_full_text=False, max_new_tokens=self.args.max_new_tokens)
         return outputs[0]['generated_text'] # type: ignore

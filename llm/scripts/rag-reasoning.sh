@@ -1,6 +1,6 @@
 
 SPLIT="test"
-DATASET_LIST="RoG-cwq"
+DATASET_LIST="RoG-webqsp"
 MODEL_NAME=llama2
 PROMPT_PATH=prompts/llama2_predict.txt
 DATA_PATH=/data/GNN-RAG/datasets
@@ -28,11 +28,17 @@ for DATA_NAME in $DATASET_LIST; do
             --rule_path ${RULE_PATH} \
             --rule_path_g1 ${RULE_PATH_G1} \
             --rule_path_g2 ${RULE_PATH_G2} \
-            --predict_path results/KGQA-GNN-RAG/rearev-sbert
+            --predict_path results/KGQA-GNN-RAG/rearev-sbert \
+            --constraint_mode entity \
+            --constraint_strength hard \
+            --constraint_k 50
     done
 done
 
-# --model_path /data/GNN-RAG/models/rmanluo-RoG \
+# 最后三行为GCD约束所需参数
+#            --constraint_mode entity \
+#            --constraint_strength hard \
+#            --constraint_k 50 \
 
 #GNN-RAG-RA
 # for DATA_NAME in $DATASET_LIST; do
@@ -55,3 +61,4 @@ done
             
 #     done
 # done
+
