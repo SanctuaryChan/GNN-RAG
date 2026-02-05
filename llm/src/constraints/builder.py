@@ -17,6 +17,7 @@ class ConstraintBuilder:
         mode: str = "entity",
         strength: str = "hard",
         max_candidates: Optional[int] = None,
+        penalty_lambda: Optional[float] = None,
     ) -> ConstraintSpec:
         if mode == "none":
             return ConstraintSpec(mode="none", strength=strength)
@@ -42,6 +43,13 @@ class ConstraintBuilder:
                 if spaced_ids and spaced_ids != token_ids:
                     sequences.append(spaced_ids)
 
+        if not sequences:
+            return ConstraintSpec(
+                mode="none",
+                strength=strength,
+                debug_info={"reason": "empty_candidates"},
+            )
+
         trie = TokenTrie()
         for seq in sequences:
             trie.add(seq)
@@ -51,4 +59,5 @@ class ConstraintBuilder:
             strength=strength,
             allowed_sequences=sequences,
             trie=trie,
+            penalty_lambda=penalty_lambda,
         )

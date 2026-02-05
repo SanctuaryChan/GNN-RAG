@@ -3,8 +3,8 @@ set -euo pipefail
 
 # 幻觉评估脚本：从 predictions.jsonl + GNN test.info 计算 EC/HR/SH 等指标
 # 使用方式：
-#   bash scripts/eval_hallucination.sh
-#   bash scripts/eval_hallucination.sh /path/to/predictions.jsonl /path/to/test.info
+#   bash test_scripts/eval_hallucination.sh
+#   bash test_scripts/eval_hallucination.sh /path/to/predictions.jsonl /path/to/test.info
 #
 # 可选环境变量：
 #   TEST_JSON=...          # 指定 test.json（默认与 test.info 同目录）

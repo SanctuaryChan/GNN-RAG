@@ -138,7 +138,7 @@ RA 需要 RoG 生成的 relation paths。仓库已提供部分结果：
 如需重新生成：
 ```bash
 cd llm
-bash scripts/planning.sh
+bash test_scripts/planning.sh
 ```
 - 默认只跑 WebQSP，如需 CWQ 请修改脚本中的 `DATASET_LIST`。
 - 需要可用的 HuggingFace 模型与 token。
@@ -147,7 +147,7 @@ bash scripts/planning.sh
 ### 7.1 GNN-RAG（不使用 RA）
 ```bash
 cd llm
-bash scripts/rag-reasoning.sh
+bash test_scripts/rag-reasoning-llama2.sh
 ```
 默认设置：
 - 数据集：`RoG-webqsp`
@@ -180,7 +180,7 @@ python src/qa_prediction/predict_answer.py \
 多跳问题统计：
 ```bash
 cd llm
-bash scripts/evaluate_multi_hop.sh
+bash test_scripts/evaluate_multi_hop.sh
 ```
 （脚本内的路径默认指向 WebQSP 结果目录，可按需修改。）
 

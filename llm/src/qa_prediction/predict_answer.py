@@ -147,6 +147,7 @@ def prediction(
     constraint_mode="none",
     constraint_strength="hard",
     constraint_k=0,
+    constraint_lambda=2.0,
 ):
     question = data["question"]
     answer = data["answer"]
@@ -190,6 +191,7 @@ def prediction(
             mode=constraint_mode,
             strength=constraint_strength,
             max_candidates=max_candidates,
+            penalty_lambda=constraint_lambda,
         )
     prediction = model.generate_sentence(input, constraints=constraints).strip()
     if prediction is None:
@@ -296,6 +298,7 @@ def main(args, LLM):
                         constraint_mode=args.constraint_mode,
                         constraint_strength=args.constraint_strength,
                         constraint_k=args.constraint_k,
+                        constraint_lambda=args.constraint_lambda,
 
                     ),
                     dataset,
@@ -321,6 +324,7 @@ def main(args, LLM):
                 constraint_mode=args.constraint_mode,
                 constraint_strength=args.constraint_strength,
                 constraint_k=args.constraint_k,
+                constraint_lambda=args.constraint_lambda,
             )
             if res is not None:
                 if args.debug:
@@ -371,6 +375,7 @@ if __name__ == "__main__":
         default="hard",
     )
     argparser.add_argument("--constraint_k", type=int, default=0)
+    argparser.add_argument("--constraint_lambda", type=float, default=2.0)
     argparser.add_argument(
         "--rule_path",
         type=str,

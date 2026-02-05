@@ -3,7 +3,7 @@ import torch
 from .base_language_model import BaseLanguageModel
 from transformers import LlamaTokenizer
 
-from constraints.logits import HardConstraintProcessor
+from constraints.logits import HardConstraintProcessor, SoftConstraintProcessor
 
 class Llama(BaseLanguageModel):
     DTYPE = {"fp32": torch.float32, "fp16": torch.float16, "bf16": torch.bfloat16}
@@ -39,7 +39,7 @@ class Llama(BaseLanguageModel):
             outputs = self.generator(llm_input, return_full_text=False, max_new_tokens=self.args.max_new_tokens)
             return outputs[0]['generated_text'] # type: ignore
 
-        if getattr(constraints, "strength", "hard") != "hard" or getattr(constraints, "trie", None) is None:
+        if getattr(constraints, "trie", None) is None:
             outputs = self.generator(llm_input, return_full_text=False, max_new_tokens=self.args.max_new_tokens)
             return outputs[0]['generated_text'] # type: ignore
 
@@ -51,13 +51,26 @@ class Llama(BaseLanguageModel):
         prompt_len = input_ids.shape[-1]
 
         logits_processor = LogitsProcessorList()
-        logits_processor.append(
-            HardConstraintProcessor(
-                constraints.trie,
-                prompt_len,
-                eos_token_id=self.tokenizer.eos_token_id,
+        if getattr(constraints, "strength", "hard") == "soft":
+            penalty = getattr(constraints, "penalty_lambda", None)
+            penalty = 2.0 if penalty is None else float(penalty)
+            logits_processor.append(
+                SoftConstraintProcessor(
+                    constraints.trie,
+                    prompt_len,
+                    eos_token_id=self.tokenizer.eos_token_id,
+                    penalty=penalty,
+                )
             )
-        )
+        else:
+            logits_processor.append(
+                HardConstraintProcessor(
+                    constraints.trie,
+                    prompt_len,
+                    eos_token_id=self.tokenizer.eos_token_id,
+                    fallback_to_unconstrained=True,
+                )
+            )
 
         outputs = self.model.generate(
             input_ids=input_ids,
