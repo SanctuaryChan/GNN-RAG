@@ -26,6 +26,8 @@ class Llama(BaseLanguageModel):
     def prepare_for_inference(self, **model_kwargs):
         self.tokenizer = AutoTokenizer.from_pretrained(self.args.model_path,  
         use_fast=False, token="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")
+        # decoder-only 模型批量推理需左侧 padding
+        self.tokenizer.padding_side = "left"
         if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
             self.tokenizer.pad_token_id = self.tokenizer.eos_token_id
