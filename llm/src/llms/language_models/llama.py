@@ -26,6 +26,9 @@ class Llama(BaseLanguageModel):
     def prepare_for_inference(self, **model_kwargs):
         self.tokenizer = AutoTokenizer.from_pretrained(self.args.model_path,  
         use_fast=False, token="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")
+        if self.tokenizer.pad_token is None:
+            self.tokenizer.pad_token = self.tokenizer.eos_token
+            self.tokenizer.pad_token_id = self.tokenizer.eos_token_id
         #model_kwargs.update({'use_auth_token': True})
         print("model: ", self.args.model_path)
         self.generator = pipeline("text-generation", token="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", model=self.args.model_path, tokenizer=self.tokenizer, device_map="auto", model_kwargs=model_kwargs, torch_dtype=self.DTYPE.get(self.args.dtype, None))
