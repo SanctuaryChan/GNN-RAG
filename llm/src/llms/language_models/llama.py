@@ -9,6 +9,10 @@ class Llama(BaseLanguageModel):
     def add_args(parser):
         parser.add_argument('--model_path', type=str, help="HUGGING FACE MODEL or model path", default='meta-llama/Llama-2-7b-chat-hf')
         parser.add_argument('--max_new_tokens', type=int, help="max length", default=512)
+        parser.add_argument('--do_sample', action='store_true', help="enable sampling decoding")
+        parser.add_argument('--temperature', type=float, default=0.7)
+        parser.add_argument('--top_p', type=float, default=0.9)
+        parser.add_argument('--top_k', type=int, default=50)
         parser.add_argument('--dtype', choices=['fp32', 'fp16', 'bf16'], default='fp16')
 
 
@@ -40,16 +44,24 @@ class Llama(BaseLanguageModel):
             gen_cfg = self.generator.model.generation_config
         gen_cfg.max_new_tokens = self.args.max_new_tokens
         gen_cfg.max_length = None
-        gen_cfg.do_sample = False
-        gen_cfg.temperature = None
+        gen_cfg.do_sample = getattr(self.args, "do_sample", False)
+        if gen_cfg.do_sample:
+            gen_cfg.temperature = self.args.temperature
+            gen_cfg.top_p = self.args.top_p
+            gen_cfg.top_k = self.args.top_k
+        else:
+            gen_cfg.temperature = None
+            gen_cfg.top_p = None
+            gen_cfg.top_k = None
         if self.tokenizer.pad_token_id is not None:
             gen_cfg.pad_token_id = self.tokenizer.pad_token_id
             if getattr(self.generator.model, "config", None) is not None:
                 self.generator.model.config.pad_token_id = self.tokenizer.pad_token_id
+                self.generator.model.config.max_length = None
 
     @torch.inference_mode()
     def generate_sentence(self, llm_input):
-        outputs = self.generator(llm_input, return_full_text=False, do_sample=False)
+        outputs = self.generator(llm_input, return_full_text=False)
         return outputs[0]['generated_text'] # type: ignore
 
     @torch.inference_mode()
@@ -57,7 +69,6 @@ class Llama(BaseLanguageModel):
         outputs = self.generator(
             llm_inputs,
             return_full_text=False,
-            do_sample=False,
             batch_size=batch_size,
         )
         results = []
