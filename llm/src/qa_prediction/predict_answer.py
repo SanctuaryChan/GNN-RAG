@@ -128,6 +128,20 @@ def clean_prediction(raw_prediction, cand_list=None):
     return cleaned
 
 
+def build_candidate_list(data, data_file_gnn):
+    if data_file_gnn is None:
+        return None
+    lineg = data_file_gnn[data["id"]]
+    cand = lineg.get("cand", [])
+    predictiong = []
+    for c in cand:
+        if c[0] in entities_names:
+            predictiong.append(entities_names[c[0]])
+        else:
+            predictiong.append(c[0])
+    return predictiong
+
+
 def load_qa_dataset(input_path, split):
     if os.path.isdir(input_path) and os.path.exists(
         os.path.join(input_path, "dataset_dict.json")
@@ -228,16 +242,7 @@ def prediction(data, processed_list, input_builder, model, encrypt=False, data_f
     data["cand"] = None
     id = data["id"]
     if data_file_gnn is not None:
-        
-        lineg = data_file_gnn[data["id"]]
-        cand = lineg['cand'] 
-        predictiong = []
-        for c in cand:
-            if c[0] in entities_names:
-                predictiong.append(entities_names[c[0]])
-            else:
-                predictiong.append(c[0])
-        data["cand"] = predictiong
+        data["cand"] = build_candidate_list(data, data_file_gnn)
     
     
     if id in processed_list:
@@ -270,6 +275,42 @@ def prediction(data, processed_list, input_builder, model, encrypt=False, data_f
         "input": input,
     }
     return result
+
+
+def prediction_batch(batch, input_builder, model, data_file_gnn=None, batch_size=4):
+    inputs = []
+    metas = []
+    for data in batch:
+        cand_list = build_candidate_list(data, data_file_gnn)
+        data_for_prompt = dict(data)
+        data_for_prompt["cand"] = cand_list
+        input_text = input_builder.process_input(data_for_prompt)
+        inputs.append(input_text)
+        metas.append((data, cand_list, input_text))
+
+    if hasattr(model, "generate_sentences"):
+        raw_outputs = model.generate_sentences(inputs, batch_size=batch_size)
+    else:
+        raw_outputs = [model.generate_sentence(x) for x in inputs]
+
+    results = []
+    for (data, cand_list, input_text), raw in zip(metas, raw_outputs):
+        if raw is None:
+            continue
+        prediction_raw = str(raw).strip()
+        cleaned = clean_prediction(prediction_raw, cand_list=cand_list)
+        prediction = "\n".join(cleaned)
+        results.append(
+            {
+                "id": data["id"],
+                "question": data["question"],
+                "prediction": prediction,
+                "prediction_raw": prediction_raw,
+                "ground_truth": data["answer"],
+                "input": input_text,
+            }
+        )
+    return results
 
 
 def main(args, LLM):
@@ -365,12 +406,46 @@ def main(args, LLM):
                     fout.write(json.dumps(res) + "\n")
                     fout.flush()
     else:
-        for data in tqdm(dataset):
-            res = prediction(data, processed_list, input_builder, model, encrypt=args.encrypt, data_file_gnn=data_file_gnn)
-            if res is not None:
-                if args.debug:
-                    print(json.dumps(res))
-                fout.write(json.dumps(res) + "\n")
+        if model is None or args.batch_size <= 1:
+            for data in tqdm(dataset):
+                res = prediction(data, processed_list, input_builder, model, encrypt=args.encrypt, data_file_gnn=data_file_gnn)
+                if res is not None:
+                    if args.debug:
+                        print(json.dumps(res))
+                    fout.write(json.dumps(res) + "\n")
+                    fout.flush()
+        else:
+            pending = []
+            for data in tqdm(dataset):
+                if data["id"] in processed_list:
+                    continue
+                pending.append(data)
+                if len(pending) >= args.batch_size:
+                    results = prediction_batch(
+                        pending,
+                        input_builder,
+                        model,
+                        data_file_gnn=data_file_gnn,
+                        batch_size=args.batch_size,
+                    )
+                    for res in results:
+                        if args.debug:
+                            print(json.dumps(res))
+                        fout.write(json.dumps(res) + "\n")
+                    fout.flush()
+                    pending = []
+            if pending:
+                results = prediction_batch(
+                    pending,
+                    input_builder,
+                    model,
+                    data_file_gnn=data_file_gnn,
+                    batch_size=args.batch_size,
+                )
+                for res in results:
+                    if args.debug:
+                        print(json.dumps(res))
+                    fout.write(json.dumps(res) + "\n")
                 fout.flush()
     fout.close()
 
@@ -424,6 +499,7 @@ if __name__ == "__main__":
     argparser.add_argument("-n", default=1, type=int, help="number of processes")
     argparser.add_argument("--filter_empty", action="store_true")
     argparser.add_argument("--debug", action="store_true")
+    argparser.add_argument("--batch_size", type=int, default=1, help="LLM batch size when n=1")
 
     argparser.add_argument("--encrypt", action="store_true")
 

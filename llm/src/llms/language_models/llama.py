@@ -34,3 +34,19 @@ class Llama(BaseLanguageModel):
     def generate_sentence(self, llm_input):
         outputs = self.generator(llm_input, return_full_text=False, max_new_tokens=self.args.max_new_tokens)
         return outputs[0]['generated_text'] # type: ignore
+
+    @torch.inference_mode()
+    def generate_sentences(self, llm_inputs, batch_size=4):
+        outputs = self.generator(
+            llm_inputs,
+            return_full_text=False,
+            max_new_tokens=self.args.max_new_tokens,
+            batch_size=batch_size,
+        )
+        results = []
+        for out in outputs:
+            if isinstance(out, list):
+                results.append(out[0]["generated_text"])
+            else:
+                results.append(out["generated_text"])
+        return results
