@@ -26,8 +26,8 @@ def normalize(s: str) -> str:
 class PromptBuilder(object):
     MCQ_INSTRUCTION = """Please answer the following questions. Select from the given choices and return only the chosen answer(s). No explanation, no extra text. One answer per line."""
     SAQ_INSTRUCTION = """Please answer the following questions. Return all possible answers only, with one answer per line. No explanation, no extra text, no numbering."""
-    MCQ_RULE_INSTRUCTION = """Based on the reasoning paths, please answer the given question. Select from the given choices and return only the chosen answer(s). No explanation, no extra text. One answer per line."""
-    SAQ_RULE_INSTRUCTION = """Based on the reasoning paths, please answer the given question. Return all possible answers only, with one answer per line. No explanation, no extra text, no numbering."""
+    MCQ_RULE_INSTRUCTION = """Based on the reasoning paths, please answer the given question. Select from the given choices and return only the chosen answer(s). Use the final entity of each reasoning path and output all distinct answers. No explanation, no extra text. One answer per line."""
+    SAQ_RULE_INSTRUCTION = """Based on the reasoning paths, please answer the given question. Use the final entity of each reasoning path and output all distinct answers. Return all answers only, with one answer per line. No explanation, no extra text, no numbering."""
     #SAQ_RULE_INSTRUCTION = """Based on the provided knowledge, please answer the given question. Please keep the answer as simple as possible and return all the possible answers as a list."""
     #SAQ_RULE_INSTRUCTION = """Your tasks is to use the following facts and answer the question. Make sure that you use the information from the facts provided. Please keep the answer as simple as possible and return all the possible answers as a list."""
     COT = """ Let's think it step by step."""
