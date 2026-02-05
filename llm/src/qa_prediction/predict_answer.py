@@ -40,6 +40,94 @@ def match(s1: str, s2: str) -> bool:
     return s2 in s1
 
 
+def _strip_leading_markers(line: str) -> str:
+    # 规范化常见的“Answer:”前缀以及项目符号/编号。
+    line = re.sub(r"^(?:answer|final answer|the answer is|答案)\s*[:\-]?\s*", "", line, flags=re.IGNORECASE)
+    line = re.sub(r"^\s*(?:[-*•]|\d+\.\s*|\d+\)\s*|\d+:\s*)", "", line)
+    return line.strip()
+
+
+def _extract_from_path(line: str) -> str:
+    # 如果输出里混入了推理路径，只保留最后的实体。
+    if "->" not in line:
+        return line
+    parts = [p.strip() for p in line.split("->") if p.strip()]
+    if not parts:
+        return ""
+    return parts[-1]
+
+
+def _extract_candidates_from_line(line: str, cand_list):
+    # 优先从句子型输出中提取候选实体。
+    if not cand_list:
+        return []
+    nline = normalize(line)
+    if nline == "":
+        return []
+    hits = []
+    for cand in cand_list:
+        nc = normalize(cand)
+        if nc == "":
+            continue
+        idx = nline.find(nc)
+        if idx != -1:
+            hits.append((idx, cand))
+    if hits:
+        hits.sort(key=lambda x: x[0])
+        return [h[1] for h in hits]
+    # If the cleaned line is a substring of exactly one candidate, map to that candidate.
+    partial = [cand for cand in cand_list if normalize(cand).find(nline) != -1]
+    if len(partial) == 1:
+        return [partial[0]]
+    return []
+
+
+def clean_prediction(raw_prediction, cand_list=None):
+    # 保守清洗：尽量保留实体，移除明显的格式噪声。
+    if raw_prediction is None:
+        return []
+    if isinstance(raw_prediction, list):
+        lines = raw_prediction
+    else:
+        lines = str(raw_prediction).splitlines()
+
+    cleaned = []
+    seen = set()
+    for line in lines:
+        if line is None:
+            continue
+        line = str(line).strip()
+        if line == "":
+            continue
+
+        line = _extract_from_path(line)
+        line = _strip_leading_markers(line)
+        if line == "":
+            continue
+
+        extracted = _extract_candidates_from_line(line, cand_list)
+        if extracted:
+            for item in extracted:
+                key = normalize(item)
+                if key and key not in seen:
+                    cleaned.append(item)
+                    seen.add(key)
+            continue
+
+        key = normalize(line)
+        if key and key not in seen:
+            cleaned.append(line)
+            seen.add(key)
+
+    if not cleaned:
+        for line in lines:
+            line = str(line).strip()
+            if line:
+                cleaned = [line]
+                break
+    return cleaned
+
+
 def load_qa_dataset(input_path, split):
     if os.path.isdir(input_path) and os.path.exists(
         os.path.join(input_path, "dataset_dict.json")
@@ -166,13 +254,18 @@ def prediction(data, processed_list, input_builder, model, encrypt=False, data_f
         }
     
     input = input_builder.process_input(data)
-    prediction = model.generate_sentence(input).strip()
-    if prediction is None:
+    prediction_raw = model.generate_sentence(input)
+    if prediction_raw is None:
         return None
+    prediction_raw = str(prediction_raw).strip()
+    # 对模型输出做后处理，稳定 hit1/precision 等指标。
+    cleaned = clean_prediction(prediction_raw, cand_list=data.get("cand"))
+    prediction = "\n".join(cleaned)
     result = {
         "id": id,
         "question": question,
         "prediction": prediction,
+        "prediction_raw": prediction_raw,
         "ground_truth": answer,
         "input": input,
     }
