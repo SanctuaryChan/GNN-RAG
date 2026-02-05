@@ -32,10 +32,17 @@ class Llama(BaseLanguageModel):
         #model_kwargs.update({'use_auth_token': True})
         print("model: ", self.args.model_path)
         self.generator = pipeline("text-generation", token="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", model=self.args.model_path, tokenizer=self.tokenizer, device_map="auto", model_kwargs=model_kwargs, torch_dtype=self.DTYPE.get(self.args.dtype, None))
+        # 统一在 generation_config 中设置生成参数，避免重复参数告警与采样不稳定
+        gen_cfg = self.generator.model.generation_config
+        gen_cfg.max_new_tokens = self.args.max_new_tokens
+        gen_cfg.max_length = None
+        gen_cfg.do_sample = False
+        if self.tokenizer.pad_token_id is not None:
+            gen_cfg.pad_token_id = self.tokenizer.pad_token_id
 
     @torch.inference_mode()
     def generate_sentence(self, llm_input):
-        outputs = self.generator(llm_input, return_full_text=False, max_new_tokens=self.args.max_new_tokens)
+        outputs = self.generator(llm_input, return_full_text=False)
         return outputs[0]['generated_text'] # type: ignore
 
     @torch.inference_mode()
@@ -43,7 +50,6 @@ class Llama(BaseLanguageModel):
         outputs = self.generator(
             llm_inputs,
             return_full_text=False,
-            max_new_tokens=self.args.max_new_tokens,
             batch_size=batch_size,
         )
         results = []
