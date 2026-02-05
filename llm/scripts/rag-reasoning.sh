@@ -1,6 +1,6 @@
 
 SPLIT="test"
-DATASET_LIST="RoG-webqsp_s10"
+DATASET_LIST="RoG-webqsp"
 MODEL_NAME=llama2
 PROMPT_PATH=prompts/llama2_predict.txt
 DATA_PATH=/data/GNN-RAG/datasets
