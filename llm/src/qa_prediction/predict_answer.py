@@ -128,6 +128,32 @@ def clean_prediction(raw_prediction, cand_list=None):
     return cleaned
 
 
+def reorder_by_cand(predictions, cand_list):
+    # 按 cand 的原始顺序（通常是 GNN 分数从高到低）重排预测，提高 hit1
+    if not predictions or not cand_list:
+        return predictions
+    cand_norm = [normalize(c) for c in cand_list]
+    rank_map = {c: i for i, c in enumerate(cand_norm) if c}
+
+    def _rank(pred):
+        np = normalize(pred)
+        if not np:
+            return (len(cand_list), 0)
+        # 精确/包含匹配
+        if np in rank_map:
+            return (rank_map[np], 0)
+        for idx, nc in enumerate(cand_norm):
+            if not nc:
+                continue
+            if np in nc or nc in np:
+                return (idx, 1)
+        return (len(cand_list), 2)
+
+    indexed = list(enumerate(predictions))
+    indexed.sort(key=lambda x: (_rank(x[1])[0], _rank(x[1])[1], x[0]))
+    return [p for _, p in indexed]
+
+
 def build_candidate_list(data, data_file_gnn):
     if data_file_gnn is None:
         return None
@@ -265,6 +291,8 @@ def prediction(data, processed_list, input_builder, model, encrypt=False, data_f
     prediction_raw = str(prediction_raw).strip()
     # 对模型输出做后处理，稳定 hit1/precision 等指标。
     cleaned = clean_prediction(prediction_raw, cand_list=data.get("cand"))
+    if getattr(model, "args", None) is not None and getattr(model.args, "reorder_by_cand", False):
+        cleaned = reorder_by_cand(cleaned, data.get("cand"))
     prediction = "\n".join(cleaned)
     result = {
         "id": id,
@@ -299,6 +327,8 @@ def prediction_batch(batch, input_builder, model, data_file_gnn=None, batch_size
             continue
         prediction_raw = str(raw).strip()
         cleaned = clean_prediction(prediction_raw, cand_list=cand_list)
+        if getattr(model, "args", None) is not None and getattr(model.args, "reorder_by_cand", False):
+            cleaned = reorder_by_cand(cleaned, cand_list)
         prediction = "\n".join(cleaned)
         results.append(
             {
@@ -500,6 +530,7 @@ if __name__ == "__main__":
     argparser.add_argument("--filter_empty", action="store_true")
     argparser.add_argument("--debug", action="store_true")
     argparser.add_argument("--batch_size", type=int, default=1, help="LLM batch size when n=1")
+    argparser.add_argument("--reorder_by_cand", action="store_true", help="reorder predictions by cand ranking")
 
     argparser.add_argument("--encrypt", action="store_true")
 
