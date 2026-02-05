@@ -29,7 +29,7 @@ for DATA_NAME in $DATASET_LIST; do
             --rule_path_g1 ${RULE_PATH_G1} \
             --rule_path_g2 ${RULE_PATH_G2} \
             --predict_path results/KGQA-GNN-RAG/rearev-sbert \
-            --batch_size 4 \
+            --batch_size 8 \
             --max_new_tokens 256 \
             --do_sample
     done
