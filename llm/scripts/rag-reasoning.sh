@@ -7,13 +7,13 @@ DATA_PATH=/data/GNN-RAG/datasets
 BEAM_LIST="3" # "1 2 3 4 5"
 MODEL_PATH=/data/GNN-RAG/models/Llama-2-7b-chat-hf
 
-# RULE_PATH 为LLM本身生成的路径
-# RULE_PATH_G1 为GNN生成的路径
-# RULE_PATH_G2 为备用（多GNN接口）
+  # RULE_PATH 为LLM本身生成的路径
+  # RULE_PATH_G1 为GNN生成的路径
+  # RULE_PATH_G2 为备用（多GNN接口）
 
-#GNN-RAG
-for DATA_NAME in $DATASET_LIST; do
-    for N_BEAM in $BEAM_LIST; do
+  #GNN-RAG
+  for DATA_NAME in $DATASET_LIST; do
+      for N_BEAM in $BEAM_LIST; do
         RULE_PATH=results/gen_rule_path/${DATA_NAME}/${MODEL_NAME}/test/predictions_${N_BEAM}_False.jsonl
         RULE_PATH_G1=results/gnn/${DATA_NAME}/rearev-sbert/test.info
         RULE_PATH_G2=None #results/gnn/${DATA_NAME}/rearev-lmsr/test.info
