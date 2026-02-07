@@ -4,7 +4,8 @@ sys.path.append(os.path.dirname(os.path.realpath(__file__)) + "/..")
 import argparse
 import json
 import random
-from datasets import load_dataset
+import glob
+from datasets import load_dataset, load_from_disk
 from tqdm import tqdm
 
 import utils
@@ -83,6 +84,23 @@ def build_samples(sample, hop, n_neg, use_verbalizer):
     return positives + negatives
 
 
+def _load_any_dataset(path, split):
+    if os.path.isdir(path) and os.path.exists(os.path.join(path, "dataset_dict.json")):
+        return load_from_disk(path)[split]
+    if os.path.isdir(path):
+        candidates = sorted(glob.glob(os.path.join(path, f"{split}.*")))
+        if candidates:
+            data_file = candidates[0]
+            ext = os.path.splitext(data_file)[1].lstrip(".").lower()
+            if ext in {"jsonl", "json"}:
+                return load_dataset("json", data_files={split: data_file}, split=split)
+            if ext == "arrow":
+                return load_dataset("arrow", data_files={split: data_file}, split=split)
+            if ext == "parquet":
+                return load_dataset("parquet", data_files={split: data_file}, split=split)
+    return load_dataset(path, split=split)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--data_path", type=str, default="rmanluo")
@@ -108,7 +126,7 @@ def main():
     if args.save_name == "":
         args.save_name = f"{args.dataset}_{args.split}.jsonl"
 
-    dataset = load_dataset(input_file, split=args.split)
+    dataset = _load_any_dataset(input_file, args.split)
     out_path = os.path.join(output_dir, args.save_name)
 
     with open(out_path, "w") as fout:
