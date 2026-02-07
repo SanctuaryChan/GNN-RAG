@@ -5,11 +5,6 @@ import utils
 import random
 from typing import Callable
 
-import json
-with open('entities_names.json') as f:
-    entities_names = json.load(f)
-names_entities = {v: k for k, v in entities_names.items()}
-
 import re 
 import string
 def normalize(s: str) -> str:
@@ -81,6 +76,7 @@ class PromptBuilder(object):
         answer = None
         if self.verbalizer_mode == "answer" and path:
             answer = path[-1][-1]
+        entities_names = utils.get_entities_names()
         text = utils.verbalize_path(
             path,
             question=question,

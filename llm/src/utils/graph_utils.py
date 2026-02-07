@@ -2,13 +2,11 @@ import networkx as nx
 from collections import deque
 #import walker
 
-import json
-with open('entities_names.json') as f:
-    entities_names = json.load(f)
-names_entities = {v: k for k, v in entities_names.items()}
+from .entity_utils import get_names_entities
 
 def build_graph(graph: list, entities=None, encrypt=False) -> nx.Graph:
     G = nx.Graph()
+    names_entities = get_names_entities() if encrypt else None
     for triplet in graph:
         h, r, t = triplet
         #entities=[]

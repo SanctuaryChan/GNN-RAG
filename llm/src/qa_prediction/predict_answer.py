@@ -17,10 +17,6 @@ from functools import partial
 
 import json
 
-with open('entities_names.json') as f:
-    entities_names = json.load(f)
-names_entities = {v: k for k, v in entities_names.items()}
-
 import re
 import string
 def normalize(s: str) -> str:
@@ -161,6 +157,7 @@ def build_candidate_list(data, data_file_gnn):
     lineg = data_file_gnn[data["id"]]
     cand = lineg.get("cand", [])
     predictiong = []
+    entities_names = utils.get_entities_names()
     for c in cand:
         if c[0] in entities_names:
             predictiong.append(entities_names[c[0]])
@@ -345,6 +342,8 @@ def prediction_batch(batch, input_builder, model, data_file_gnn=None, batch_size
 
 
 def main(args, LLM):
+    if getattr(args, "entities_names_path", None):
+        utils.set_entities_names_path(args.entities_names_path)
     input_file = os.path.join(args.data_path, args.d)
     rule_postfix = "no_rule"
     # Load dataset
@@ -568,6 +567,7 @@ if __name__ == "__main__":
     argparser.add_argument("--reranker_max_length", type=int, default=256)
     argparser.add_argument("--reranker_use_answer", action="store_true")
     argparser.add_argument("--reranker_use_question", action="store_true")
+    argparser.add_argument("--entities_names_path", type=str, default=None, help="path to entities_names.json")
 
     args, _ = argparser.parse_known_args()
     if args.model_name != "no-llm":

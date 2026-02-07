@@ -15,7 +15,7 @@ You can improve path quality before feeding to LLMs by using a template verbaliz
 
 1) Build reranker dataset:
 ```
-python -m align_kg.build_path_rank_dataset --data_path rmanluo -d webqsp --split train --use_verbalizer
+python -m align_kg.build_path_rank_dataset --data_path rmanluo -d webqsp --split train --use_verbalizer --entities_names_path /path/to/entities_names.json
 ```
 
 2) Train a cross-encoder reranker:
@@ -25,7 +25,7 @@ python -m align_kg.train_path_reranker --data_path datasets/PathRankData/webqsp/
 
 3) Run prediction with verbalizer + reranker:
 ```
-python -m qa_prediction.predict_answer --use_verbalizer --reranker_path saved_models/path_reranker --reranker_topk 5
+python -m qa_prediction.predict_answer --use_verbalizer --reranker_path saved_models/path_reranker --reranker_topk 5 --entities_names_path /path/to/entities_names.json
 ```
 
 ## Resutls

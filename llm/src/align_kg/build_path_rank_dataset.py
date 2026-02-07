@@ -94,9 +94,12 @@ def main():
     parser.add_argument("--n_neg", type=int, default=2)
     parser.add_argument("--use_verbalizer", action="store_true")
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--entities_names_path", type=str, default=None)
     args = parser.parse_args()
 
     random.seed(args.seed)
+    if args.entities_names_path:
+        utils.set_entities_names_path(args.entities_names_path)
 
     input_file = os.path.join(args.data_path, args.dataset)
     output_dir = os.path.join(args.output_path, args.dataset)

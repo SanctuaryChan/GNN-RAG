@@ -13,9 +13,6 @@ import utils
 from datasets import load_dataset
 
 import json
-with open('entities_names.json') as f:
-    entities_names = json.load(f)
-names_entities = {v: k for k, v in entities_names.items()}
 
 
 def normalize(s: str) -> str:
