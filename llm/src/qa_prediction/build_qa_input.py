@@ -37,7 +37,24 @@ class PromptBuilder(object):
     #GRAPH_CONTEXT = """The facts are the following:\n{context}\n\n"""
     CHOICES = """\nChoices:\n{choices}"""
     EACH_LINE = """ Please return each answer in a new line."""
-    def __init__(self, prompt_path, encrypt=False, add_rule = False, use_true = False, cot = False, explain = False, use_random = False, each_line = False, maximun_token = 4096, tokenize: Callable = lambda x: len(x)):
+    def __init__(
+        self,
+        prompt_path,
+        encrypt=False,
+        add_rule=False,
+        use_true=False,
+        cot=False,
+        explain=False,
+        use_random=False,
+        each_line=False,
+        maximun_token=4096,
+        tokenize: Callable = lambda x: len(x),
+        use_verbalizer=False,
+        verbalizer_mode="plain",
+        verbalizer_operator="auto",
+        reranker=None,
+        reranker_topk=0,
+    ):
         self.prompt_template = self._read_prompt_template(prompt_path)
         self.add_rule = add_rule
         self.use_true = use_true
@@ -49,6 +66,31 @@ class PromptBuilder(object):
         self.each_line = each_line
 
         self.encrypt=encrypt
+        self.use_verbalizer = use_verbalizer
+        self.verbalizer_mode = verbalizer_mode
+        self.verbalizer_operator = verbalizer_operator
+        self.reranker = reranker
+        self.reranker_topk = reranker_topk
+        # If reranker is used, preserve ordering when trimming for length.
+        self.preserve_order = reranker is not None
+
+    def _format_path_text(self, path, question):
+        if not self.use_verbalizer:
+            return utils.path_to_string(path)
+        operator = None if self.verbalizer_operator == "auto" else self.verbalizer_operator
+        answer = None
+        if self.verbalizer_mode == "answer" and path:
+            answer = path[-1][-1]
+        text = utils.verbalize_path(
+            path,
+            question=question,
+            operator=operator,
+            entity_map=entities_names,
+            answer=answer,
+        )
+        if text is None or text.strip() == "":
+            return utils.path_to_string(path)
+        return text
         
     def _read_prompt_template(self, template_file):
         with open(template_file) as fin:
@@ -90,6 +132,8 @@ class PromptBuilder(object):
             question += '?'
         
         lists_of_paths = []
+        lists_of_answers = []
+        lists_of_rel_paths = []
         if self.add_rule:
             entities = question_dict['q_entity']
             #graph = utils.build_graph(question_dict['graph'], entities, self.encrypt)
@@ -104,7 +148,13 @@ class PromptBuilder(object):
                 rules = question_dict['predicted_paths']
             if len(rules) > 0:
                 reasoning_paths = self.apply_rules(graph, rules, entities)
-                lists_of_paths = [utils.path_to_string(p) for p in reasoning_paths]
+                lists_of_paths = []
+                lists_of_answers = []
+                lists_of_rel_paths = []
+                for p in reasoning_paths:
+                    lists_of_paths.append(self._format_path_text(p, question))
+                    lists_of_answers.append(p[-1][-1] if p else None)
+                    lists_of_rel_paths.append([r for _, r, _ in p] if p else [])
                 
                 # context = "\n".join([utils.path_to_string(p) for p in reasoning_paths])
             else:
@@ -119,12 +169,16 @@ class PromptBuilder(object):
             #print(question_dict['cand'])
             reasoning_paths = utils.get_truth_paths(question_dict['q_entity'], question_dict['cand'], graph)
             for p in reasoning_paths:
-                if utils.path_to_string(p) not in lists_of_paths:
-                    lists_of_paths.append(utils.path_to_string(p))
+                p_text = self._format_path_text(p, question)
+                if p_text not in lists_of_paths:
+                    lists_of_paths.append(p_text)
+                    lists_of_answers.append(p[-1][-1] if p else None)
+                    lists_of_rel_paths.append([r for _, r, _ in p] if p else [])
             
             for p in reasoning_paths:
-                if utils.path_to_string(p) not in lists_of_paths2:
-                    lists_of_paths2.append(utils.path_to_string(p))
+                p_text = self._format_path_text(p, question)
+                if p_text not in lists_of_paths2:
+                    lists_of_paths2.append(p_text)
            
         input = self.QUESTION.format(question = question)
         # MCQ
@@ -153,6 +207,15 @@ class PromptBuilder(object):
         
         if self.add_rule or question_dict['cand'] is not None:
             other_prompt = self.prompt_template.format(instruction = instruction, input = self.GRAPH_CONTEXT.format(context = "") + input)
+            # optional reranking before prompt truncation
+            if self.reranker is not None and self.reranker_topk and lists_of_paths:
+                lists_of_paths = self.reranker.rerank(
+                    question=question,
+                    path_texts=lists_of_paths,
+                    answers=lists_of_answers,
+                    rel_paths=lists_of_rel_paths,
+                    topk=self.reranker_topk,
+                )
             context = self.check_prompt_length(other_prompt, lists_of_paths, self.maximun_token)
             
             input = self.GRAPH_CONTEXT.format(context = context) + input
@@ -162,14 +225,15 @@ class PromptBuilder(object):
         return input
     
     def check_prompt_length(self, prompt, list_of_paths, maximun_token):
-        '''Check whether the input prompt is too long. If it is too long, remove the first path and check again.'''
+        '''Check whether the input prompt is too long. If it is too long, trim paths.'''
         all_paths = "\n".join(list_of_paths)
         all_tokens = prompt + all_paths
         if self.tokenize(all_tokens) < maximun_token:
             return all_paths
         else:
-            # Shuffle the paths
-            random.shuffle(list_of_paths)
+            # If reranker is used, preserve path order (higher score first).
+            if not self.preserve_order:
+                random.shuffle(list_of_paths)
             new_list_of_paths = []
             # check the length of the prompt
             for p in list_of_paths:

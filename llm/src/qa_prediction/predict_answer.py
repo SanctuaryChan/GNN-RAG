@@ -12,6 +12,7 @@ from qa_prediction.evaluate_results import eval_result
 import json
 from multiprocessing import Pool
 from qa_prediction.build_qa_input import PromptBuilder
+from align_kg.path_reranker import build_reranker
 from functools import partial
 
 import json
@@ -383,6 +384,16 @@ def main(args, LLM):
     # Predict
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
+    reranker = None
+    if args.reranker_path:
+        reranker = build_reranker(
+            args.reranker_path,
+            mode=args.reranker_mode,
+            max_length=args.reranker_max_length,
+            use_answer=args.reranker_use_answer,
+            use_question=args.reranker_use_question,
+        )
+
     if LLM is not None:
         model = LLM(args)
         input_builder = PromptBuilder(
@@ -396,6 +407,11 @@ def main(args, LLM):
             each_line=args.each_line,
             maximun_token=model.maximun_token,
             tokenize=model.tokenize,
+            use_verbalizer=args.use_verbalizer,
+            verbalizer_mode=args.verbalizer_mode,
+            verbalizer_operator=args.verbalizer_operator,
+            reranker=reranker,
+            reranker_topk=args.reranker_topk,
         )
         print("Prepare pipline for inference...")
         model.prepare_for_inference()
@@ -403,7 +419,15 @@ def main(args, LLM):
         model = None
         # Directly return last entity as answer
         input_builder = PromptBuilder(
-            args.prompt_path, args.encrypt,args.add_rule, use_true=args.use_true
+            args.prompt_path,
+            args.encrypt,
+            args.add_rule,
+            use_true=args.use_true,
+            use_verbalizer=args.use_verbalizer,
+            verbalizer_mode=args.verbalizer_mode,
+            verbalizer_operator=args.verbalizer_operator,
+            reranker=reranker,
+            reranker_topk=args.reranker_topk,
         )
 
     # Save args file
@@ -533,6 +557,17 @@ if __name__ == "__main__":
     argparser.add_argument("--reorder_by_cand", action="store_true", help="reorder predictions by cand ranking")
 
     argparser.add_argument("--encrypt", action="store_true")
+
+    argparser.add_argument("--use_verbalizer", action="store_true", help="use path verbalizer for reasoning paths")
+    argparser.add_argument("--verbalizer_mode", type=str, default="plain", choices=["plain", "answer"])
+    argparser.add_argument("--verbalizer_operator", type=str, default="auto", help="auto or a fixed operator label")
+
+    argparser.add_argument("--reranker_path", type=str, default=None, help="path to trained path reranker model")
+    argparser.add_argument("--reranker_mode", type=str, default="cross", choices=["cross", "align"])
+    argparser.add_argument("--reranker_topk", type=int, default=0, help="top-k paths kept after reranking")
+    argparser.add_argument("--reranker_max_length", type=int, default=256)
+    argparser.add_argument("--reranker_use_answer", action="store_true")
+    argparser.add_argument("--reranker_use_question", action="store_true")
 
     args, _ = argparser.parse_known_args()
     if args.model_name != "no-llm":
