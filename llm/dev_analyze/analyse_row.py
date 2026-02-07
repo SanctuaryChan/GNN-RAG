@@ -64,6 +64,43 @@ def load_test_info(test_info_file):
                 print(f"Warning: Skipping invalid line in {test_info_file}: {line[:100]}... ({e})")
     return cand_map, total, dup
 
+def resolve_entities_names_path(user_path):
+    """Resolve entities_names.json path from user input or common locations."""
+    if user_path:
+        return user_path
+    candidates = [
+        os.path.join(os.getcwd(), "entities_names.json"),
+        os.path.join(os.path.dirname(__file__), "..", "..", "entities_names.json"),
+    ]
+    for path in candidates:
+        if os.path.exists(path):
+            return path
+    return None
+
+def load_entities_names(path):
+    if not path:
+        return None
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception as e:
+        print(f"Warning: Failed to load entities_names.json from {path}: {e}")
+        return None
+
+def map_cand_to_names(cand, entities_names):
+    if not cand or not entities_names:
+        return None
+    mapped = []
+    for item in cand:
+        if isinstance(item, list) and len(item) >= 2:
+            mid = item[0]
+            score = item[1]
+            name = entities_names.get(mid, mid)
+            mapped.append([name, score])
+        else:
+            mapped.append(item)
+    return mapped
+
 def main():
     parser = argparse.ArgumentParser(description="Merge eval results with input prompts using 'id', and filter low-hit samples.")
     parser.add_argument("--data-dir", help="Directory containing predictions.jsonl and detailed_eval_result.jsonl")
@@ -74,6 +111,8 @@ def main():
     parser.add_argument("--output", required=True, help="Output file path for filtered samples")
     parser.add_argument("--hit-threshold", type=int, default=0, help="Keep samples with hit <= this value (default: 0)")
     parser.add_argument("--test-info", help="Path to test.info jsonl (merge 'cand' by question)")
+    parser.add_argument("--entities-names", help="Path to entities_names.json for cand MID -> name mapping")
+    parser.add_argument("--cand-name", action="store_true", help="Replace cand MID with name (keeps original in cand_mid)")
     args = parser.parse_args()
 
     # If data-dir provided, compose pred/eval paths when missing
@@ -102,6 +141,10 @@ def main():
     test_info_dup = 0
     if args.test_info:
         cand_map, test_info_total, test_info_dup = load_test_info(args.test_info)
+
+    # Step 1.6: Load entities_names.json (optional)
+    entities_names_path = resolve_entities_names_path(args.entities_names)
+    entities_names = load_entities_names(entities_names_path)
 
     # Step 2: Process eval file and merge
     kept_count = 0
@@ -138,6 +181,13 @@ def main():
                     }
                     if args.test_info:
                         merged["cand"] = cand
+                        if entities_names is not None and cand is not None:
+                            cand_named = map_cand_to_names(cand, entities_names)
+                            if args.cand_name:
+                                merged["cand_mid"] = cand
+                                merged["cand"] = cand_named
+                            else:
+                                merged["cand_named"] = cand_named
                         if cand is not None:
                             cand_matched += 1
                     fout.write(json.dumps(merged, ensure_ascii=False) + '\n')
@@ -149,6 +199,8 @@ def main():
     if args.test_info:
         print(f"test.info loaded: {test_info_total} questions, {test_info_dup} duplicates")
         print(f"cand matched for kept samples: {cand_matched}/{kept_count}")
+    if entities_names_path:
+        print(f"entities_names.json: {entities_names_path}")
 
 if __name__ == "__main__":
     main()
