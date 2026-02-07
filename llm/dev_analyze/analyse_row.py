@@ -101,6 +101,84 @@ def map_cand_to_names(cand, entities_names):
             mapped.append(item)
     return mapped
 
+def normalize_text(text):
+    """Lower text and remove punctuation/articles/extra spaces for matching."""
+    if text is None:
+        return ""
+    text = str(text).lower()
+    # remove punctuation
+    text = re.sub(r"[^\w\s]", "", text)
+    # remove articles
+    text = re.sub(r"\b(a|an|the)\b", " ", text)
+    text = " ".join(text.split())
+    return text
+
+def is_mid(text):
+    if not text:
+        return False
+    return str(text).startswith(("m.", "g."))
+
+def extract_cand_entities(cand):
+    if not cand:
+        return []
+    if isinstance(cand, list):
+        if len(cand) == 0:
+            return []
+        if isinstance(cand[0], list):
+            return [item[0] for item in cand if item]
+        return cand
+    return []
+
+def compute_cand_hit_rank(ground_truth, cand, cand_mid, entities_names):
+    cand_names = extract_cand_entities(cand)
+    cand_mids = extract_cand_entities(cand_mid)
+    cand_names_norm = [normalize_text(c) for c in cand_names]
+
+    def _rank_in_names(target):
+        n_target = normalize_text(target)
+        if not n_target:
+            return None
+        for idx, name_norm in enumerate(cand_names_norm):
+            if n_target == name_norm:
+                return idx + 1
+        return None
+
+    best_rank = None
+    for gt in (ground_truth or []):
+        if gt is None:
+            continue
+        gt_str = str(gt)
+        rank = None
+        if is_mid(gt_str):
+            if cand_mids:
+                try:
+                    idx = cand_mids.index(gt_str)
+                    rank = idx + 1
+                except ValueError:
+                    rank = None
+            if rank is None and entities_names:
+                gt_name = entities_names.get(gt_str)
+                if gt_name:
+                    rank = _rank_in_names(gt_name)
+        else:
+            rank = _rank_in_names(gt_str)
+            if rank is None and cand_mids and entities_names:
+                mapped_names = [entities_names.get(mid, mid) for mid in cand_mids]
+                mapped_norm = [normalize_text(n) for n in mapped_names]
+                n_target = normalize_text(gt_str)
+                for idx, name_norm in enumerate(mapped_norm):
+                    if n_target == name_norm:
+                        rank = idx + 1
+                        break
+
+        if rank is not None:
+            if best_rank is None or rank < best_rank:
+                best_rank = rank
+
+    cand_hit = 1 if best_rank is not None else 0
+    cand_rank = best_rank if best_rank is not None else -1
+    return cand_hit, cand_rank
+
 def main():
     parser = argparse.ArgumentParser(description="Merge eval results with input prompts using 'id', and filter low-hit samples.")
     parser.add_argument("--data-dir", help="Directory containing predictions.jsonl and detailed_eval_result.jsonl")
@@ -149,6 +227,9 @@ def main():
     # Step 2: Process eval file and merge
     kept_count = 0
     cand_matched = 0
+    cand_hit_sum = 0
+    cand_rank_sum = 0
+    cand_rank_count = 0
     with open(args.eval, 'r', encoding='utf-8') as fin, \
          open(args.output, 'w', encoding='utf-8') as fout:
         for line in fin:
@@ -190,6 +271,21 @@ def main():
                                 merged["cand_named"] = cand_named
                         if cand is not None:
                             cand_matched += 1
+                    # Compute cand hit/rank when cand info available
+                    cand_for_rank = merged.get("cand")
+                    cand_mid_for_rank = merged.get("cand_mid")
+                    cand_hit, cand_rank = compute_cand_hit_rank(
+                        merged.get("ground_truth"),
+                        cand_for_rank,
+                        cand_mid_for_rank,
+                        entities_names,
+                    )
+                    merged["cand_hit"] = cand_hit
+                    merged["cand_rank"] = cand_rank
+                    cand_hit_sum += cand_hit
+                    if cand_rank != -1:
+                        cand_rank_sum += cand_rank
+                        cand_rank_count += 1
                     fout.write(json.dumps(merged, ensure_ascii=False) + '\n')
                     kept_count += 1
             except Exception as e:
@@ -199,6 +295,14 @@ def main():
     if args.test_info:
         print(f"test.info loaded: {test_info_total} questions, {test_info_dup} duplicates")
         print(f"cand matched for kept samples: {cand_matched}/{kept_count}")
+    if kept_count > 0:
+        cand_hit_rate = cand_hit_sum / kept_count
+        avg_rank = (cand_rank_sum / cand_rank_count) if cand_rank_count > 0 else None
+        print(f"cand_hit_rate: {cand_hit_rate:.4f}")
+        if avg_rank is not None:
+            print(f"cand_avg_rank(hit only): {avg_rank:.4f}")
+        else:
+            print("cand_avg_rank(hit only): NA")
     if entities_names_path:
         print(f"entities_names.json: {entities_names_path}")
 
