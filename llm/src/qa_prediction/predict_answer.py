@@ -222,14 +222,17 @@ def main(args, LLM):
 
 
 
-    if args.cot:
-        rule_postfix += "_cot"
-    if args.explain:
-        rule_postfix += "_explain"
+    if not args.strict_answer:
+        if args.cot:
+            rule_postfix += "_cot"
+        if args.explain:
+            rule_postfix += "_explain"
     if args.filter_empty:
         rule_postfix += "_filter_empty"
     if args.each_line:
         rule_postfix += "_each_line"
+    if args.strict_answer:
+        rule_postfix += "_strict_answer"
         
     print("Load dataset from finished")
 
@@ -278,6 +281,7 @@ def main(args, LLM):
             explain=args.explain,
             use_random=args.use_random,
             each_line=args.each_line,
+            strict_answer=args.strict_answer,
             maximun_token=model.maximun_token,
             tokenize=model.tokenize,
         )
@@ -287,7 +291,11 @@ def main(args, LLM):
         model = None
         # Directly return last entity as answer
         input_builder = PromptBuilder(
-            args.prompt_path, args.encrypt,args.add_rule, use_true=args.use_true
+            args.prompt_path,
+            args.encrypt,
+            args.add_rule,
+            use_true=args.use_true,
+            strict_answer=args.strict_answer,
         )
 
     # Save args file
@@ -398,6 +406,7 @@ if __name__ == "__main__":
     argparser.add_argument("--explain", action="store_true")
     argparser.add_argument("--use_random", action="store_true")
     argparser.add_argument("--each_line", action="store_true")
+    argparser.add_argument("--strict_answer", action="store_true")
     argparser.add_argument(
         "--rule_path",
         type=str,
