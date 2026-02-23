@@ -1,4 +1,5 @@
 from typing import List, Optional
+import inspect
 
 from transformers import AutoTokenizer
 
@@ -35,6 +36,8 @@ class VLLM(BaseLanguageModel):
         parser.add_argument("--trust_remote_code", action="store_true")
         parser.add_argument("--hf_token", type=str, default=None)
         parser.add_argument("--vllm_swap_space", type=float, default=4.0)
+        parser.add_argument("--vllm_quiet", action="store_true")
+        parser.add_argument("--vllm_disable_tqdm", action="store_true")
 
     def __init__(self, args):
         super().__init__(args)
@@ -87,15 +90,37 @@ class VLLM(BaseLanguageModel):
             llm_kwargs["max_model_len"] = self.args.max_model_len
         llm_kwargs.update(model_kwargs)
 
+        if self.args.vllm_quiet:
+            llm_sig = inspect.signature(LLM.__init__)
+            quiet_options = {
+                "disable_log_stats": True,
+                "disable_log_requests": True,
+                "disable_progress_bar": True,
+                "log_stats": False,
+            }
+            for name, value in quiet_options.items():
+                if name in llm_sig.parameters:
+                    llm_kwargs[name] = value
+
         self.llm = LLM(**llm_kwargs)
         self.sampling_params = SamplingParams(max_tokens=self.args.max_new_tokens)
 
+    def _generate(self, prompts: List[str]):
+        gen_kwargs = {}
+        if self.args.vllm_disable_tqdm:
+            gen_sig = inspect.signature(self.llm.generate)
+            if "use_tqdm" in gen_sig.parameters:
+                gen_kwargs["use_tqdm"] = False
+            if "disable_tqdm" in gen_sig.parameters:
+                gen_kwargs["disable_tqdm"] = True
+        return self.llm.generate(prompts, self.sampling_params, **gen_kwargs)
+
     def generate_sentence(self, llm_input):
-        outputs = self.llm.generate([llm_input], self.sampling_params)
+        outputs = self._generate([llm_input])
         return outputs[0].outputs[0].text  # type: ignore
 
     def generate_batch(self, prompts: List[str]) -> List[Optional[str]]:
-        outputs = self.llm.generate(prompts, self.sampling_params)
+        outputs = self._generate(prompts)
         results: List[Optional[str]] = []
         for output in outputs:
             if output.outputs:

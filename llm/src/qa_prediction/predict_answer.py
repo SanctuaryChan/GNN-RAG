@@ -268,6 +268,8 @@ def main(args, LLM):
     output_file = os.path.join(output_dir, f"predictions.jsonl")
     fout, processed_list = get_output_file(output_file, force=args.force)
 
+    progress = tqdm(total=len(dataset), desc="Predict", dynamic_ncols=True)
+
     if model is not None and args.batch_size > 1:
         if args.n > 1:
             print("batch_size > 1: disable multiprocessing for inference.")
@@ -280,12 +282,12 @@ def main(args, LLM):
                     continue
                 item["prediction"] = pred.strip()
                 if args.debug:
-                    print(json.dumps(item))
+                    tqdm.write(json.dumps(item))
                 fout.write(json.dumps(item) + "\n")
                 fout.flush()
 
         batch = []
-        for data in tqdm(dataset):
+        for data in dataset:
             item = build_llm_input(
                 data,
                 processed_list=processed_list,
@@ -293,6 +295,7 @@ def main(args, LLM):
                 encrypt=args.encrypt,
                 data_file_gnn=data_file_gnn,
             )
+            progress.update(1)
             if item is None:
                 continue
             batch.append(item)
@@ -303,34 +306,34 @@ def main(args, LLM):
             flush_batch(batch)
     elif args.n > 1:
         with Pool(args.n) as p:
-            for res in tqdm(
-                p.imap(
-                    partial(
-                        prediction,
-                        processed_list=processed_list,
-                        input_builder=input_builder,
-                        model=model,
-                        encrypt=args.encrypt,
-                        data_file_gnn=data_file_gnn
+            for res in p.imap(
+                partial(
+                    prediction,
+                    processed_list=processed_list,
+                    input_builder=input_builder,
+                    model=model,
+                    encrypt=args.encrypt,
+                    data_file_gnn=data_file_gnn
 
-                    ),
-                    dataset,
                 ),
-                total=len(dataset),
+                dataset,
             ):
+                progress.update(1)
                 if res is not None:
                     if args.debug:
-                        print(json.dumps(res))
+                        tqdm.write(json.dumps(res))
                     fout.write(json.dumps(res) + "\n")
                     fout.flush()
     else:
-        for data in tqdm(dataset):
+        for data in dataset:
             res = prediction(data, processed_list, input_builder, model, encrypt=args.encrypt, data_file_gnn=data_file_gnn)
+            progress.update(1)
             if res is not None:
                 if args.debug:
-                    print(json.dumps(res))
+                    tqdm.write(json.dumps(res))
                 fout.write(json.dumps(res) + "\n")
                 fout.flush()
+    progress.close()
     fout.close()
 
     eval_result(output_file, encrypt=args.encrypt)

@@ -35,6 +35,8 @@ for DATA_NAME in $DATASET_LIST; do
             --batch_size ${BATCH_SIZE} \
             --tensor_parallel_size ${TP_SIZE} \
             --dtype fp16 \
-            --gpu_memory_utilization 0.90
+            --gpu_memory_utilization 0.90 \
+            --vllm_quiet \
+            --vllm_disable_tqdm
     done
 done
