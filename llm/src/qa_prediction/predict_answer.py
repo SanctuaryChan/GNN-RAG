@@ -132,7 +132,7 @@ def merge_rule_result(qa_dataset, rule_dataset, n_proc=1, filter_empty=False):
     return qa_dataset
 
 
-def prediction(data, processed_list, input_builder, model, encrypt=False, data_file_gnn=None):
+def build_llm_input(data, processed_list, input_builder, encrypt=False, data_file_gnn=None):
     question = data["question"]
     answer = data["answer"]
     entities = data['q_entity']
@@ -154,30 +154,49 @@ def prediction(data, processed_list, input_builder, model, encrypt=False, data_f
     
     if id in processed_list:
         return None
-    
-    if model is None:
-        prediction = input_builder.direct_answer(data)
-        return {
-            "id": id,
-            "question": question,
-            "prediction": prediction,
-            "ground_truth": answer,
-            "input": question,
-        }
-    
+
     input = input_builder.process_input(data)
-    prediction = model.generate_sentence(input).strip()
-    if prediction is None:
-        return None
     result = {
         "id": id,
         "question": question,
-        "prediction": prediction,
         "ground_truth": answer,
         "input": input,
     }
     return result
 
+
+def prediction(data, processed_list, input_builder, model, encrypt=False, data_file_gnn=None):
+    if model is None:
+        prediction = input_builder.direct_answer(data)
+        return {
+            "id": data["id"],
+            "question": data["question"],
+            "prediction": prediction,
+            "ground_truth": data["answer"],
+            "input": data["question"],
+        }
+
+    result = build_llm_input(
+        data,
+        processed_list=processed_list,
+        input_builder=input_builder,
+        encrypt=encrypt,
+        data_file_gnn=data_file_gnn,
+    )
+    if result is None:
+        return None
+
+    prediction = model.generate_sentence(result["input"])
+    if prediction is None:
+        return None
+    result["prediction"] = prediction.strip()
+    return result
+
+
+def generate_batch_texts(model, prompts):
+    if hasattr(model, "generate_batch"):
+        return model.generate_batch(prompts)
+    return [model.generate_sentence(p) for p in prompts]
 
 def main(args, LLM):
     input_file = os.path.join(args.data_path, args.d)
@@ -249,7 +268,40 @@ def main(args, LLM):
     output_file = os.path.join(output_dir, f"predictions.jsonl")
     fout, processed_list = get_output_file(output_file, force=args.force)
 
-    if args.n > 1:
+    if model is not None and args.batch_size > 1:
+        if args.n > 1:
+            print("batch_size > 1: disable multiprocessing for inference.")
+
+        def flush_batch(batch_items):
+            prompts = [item["input"] for item in batch_items]
+            predictions = generate_batch_texts(model, prompts)
+            for item, pred in zip(batch_items, predictions):
+                if pred is None:
+                    continue
+                item["prediction"] = pred.strip()
+                if args.debug:
+                    print(json.dumps(item))
+                fout.write(json.dumps(item) + "\n")
+                fout.flush()
+
+        batch = []
+        for data in tqdm(dataset):
+            item = build_llm_input(
+                data,
+                processed_list=processed_list,
+                input_builder=input_builder,
+                encrypt=args.encrypt,
+                data_file_gnn=data_file_gnn,
+            )
+            if item is None:
+                continue
+            batch.append(item)
+            if len(batch) >= args.batch_size:
+                flush_batch(batch)
+                batch = []
+        if batch:
+            flush_batch(batch)
+    elif args.n > 1:
         with Pool(args.n) as p:
             for res in tqdm(
                 p.imap(
@@ -329,6 +381,7 @@ if __name__ == "__main__":
         "--force", "-f", action="store_true", help="force to overwrite the results"
     )
     argparser.add_argument("-n", default=1, type=int, help="number of processes")
+    argparser.add_argument("--batch_size", type=int, default=1)
     argparser.add_argument("--filter_empty", action="store_true")
     argparser.add_argument("--debug", action="store_true")
 
