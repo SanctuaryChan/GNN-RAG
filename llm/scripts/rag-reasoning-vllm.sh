@@ -37,6 +37,7 @@ for DATA_NAME in $DATASET_LIST; do
             --dtype fp16 \
             --gpu_memory_utilization 0.90 \
             --vllm_quiet \
-            --vllm_disable_tqdm
+            --vllm_disable_tqdm \
+            --flat_output
     done
 done

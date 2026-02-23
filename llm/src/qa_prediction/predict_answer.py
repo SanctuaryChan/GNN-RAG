@@ -4,6 +4,7 @@ import os
 sys.path.append(os.path.dirname(os.path.realpath(__file__)) + "/..")
 import utils
 import argparse
+from datetime import datetime
 from tqdm import tqdm
 from llms.language_models import get_registed_model
 import os
@@ -231,10 +232,38 @@ def main(args, LLM):
         rule_postfix += "_each_line"
         
     print("Load dataset from finished")
-    output_dir = os.path.join(
-        args.predict_path, args.d, args.model_name, args.split, rule_postfix, str(args.encrypt)
-    )
-    print("Save results to: ", output_dir)
+
+    def _safe_filename(value: str) -> str:
+        return value.replace("/", "_").replace(" ", "_")
+
+    if args.flat_output:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = "__".join(
+            [
+                timestamp,
+                _safe_filename(args.d),
+                _safe_filename(args.model_name),
+                _safe_filename(args.split),
+                _safe_filename(rule_postfix),
+                _safe_filename(str(args.encrypt)),
+            ]
+        )
+        output_dir = os.path.join(args.predict_path, filename)
+        output_file = os.path.join(output_dir, "predictions.jsonl")
+        args_file = os.path.join(output_dir, "args.txt")
+    else:
+        output_dir = os.path.join(
+            args.predict_path,
+            args.d,
+            args.model_name,
+            args.split,
+            rule_postfix,
+            str(args.encrypt),
+        )
+        output_file = os.path.join(output_dir, "predictions.jsonl")
+        args_file = os.path.join(output_dir, "args.txt")
+
+    print("Save results to: ", output_file)
     # Predict
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
@@ -262,10 +291,8 @@ def main(args, LLM):
         )
 
     # Save args file
-    with open(os.path.join(output_dir, "args.txt"), "w") as f:
+    with open(args_file, "w") as f:
         json.dump(args.__dict__, f, indent=2)
-
-    output_file = os.path.join(output_dir, f"predictions.jsonl")
     fout, processed_list = get_output_file(output_file, force=args.force)
 
     progress = tqdm(total=len(dataset), desc="Predict", dynamic_ncols=True)
@@ -391,6 +418,11 @@ if __name__ == "__main__":
     )
     argparser.add_argument("-n", default=1, type=int, help="number of processes")
     argparser.add_argument("--batch_size", type=int, default=1)
+    argparser.add_argument(
+        "--flat_output",
+        action="store_true",
+        help="write results into a timestamped single-level directory under predict_path",
+    )
     argparser.add_argument("--filter_empty", action="store_true")
     argparser.add_argument("--debug", action="store_true")
 
