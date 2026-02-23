@@ -79,7 +79,8 @@ def add_parse_args(parser):
     create_parser_graftnet(parser_graftnet)
 
     parser_nutrea = subparsers.add_parser("NuTrea")
-    create_parser_nutrea(parser_nutrea)
+    # NOTE: NuTrea parser is not defined in this repo. Keep it disabled to avoid NameError.
+    # create_parser_nutrea(parser_nutrea)
 
 
 def create_parser_rearev(parser):
