@@ -351,6 +351,12 @@ if __name__ == "__main__":
         default="gpt-3.5-turbo",
     )
     argparser.add_argument(
+        "--engine",
+        type=str,
+        default=None,
+        help="llm backend engine (e.g., vllm); defaults to model_name",
+    )
+    argparser.add_argument(
         "--prompt_path",
         type=str,
         help="prompt_path",
@@ -388,8 +394,9 @@ if __name__ == "__main__":
     argparser.add_argument("--encrypt", action="store_true")
 
     args, _ = argparser.parse_known_args()
-    if args.model_name != "no-llm":
-        LLM = get_registed_model(args.model_name)
+    engine_name = args.engine if args.engine is not None else args.model_name
+    if engine_name != "no-llm":
+        LLM = get_registed_model(engine_name)
         LLM.add_args(argparser)
     else:
         LLM = None
